@@ -13,9 +13,7 @@ void Decmod::Enqueue(Packet *p){
         return;
     }else{
         q.push(*p);
-	//cout << "debug:EQP1" << global.num_packet << " status==" << status << " hash==" << p->hash << endl;
         if(q.size() >= 1 && status == 0){
-	  //cout << "debug:EQP2" << global.num_packet << endl;
             Global::Event e = pair<Global::Func, Packet>(&Global::outputQueue, *p);
             global.event_handler.insert(pair<double, Global::Event>(p->timestamp, e));
         }

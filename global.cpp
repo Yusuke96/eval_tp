@@ -41,7 +41,7 @@ Global::Global(){
 Global::~Global(){
 	delete[] mod;
 	delete[] cache;
-    delete table;
+    delete[] table;
     delete dram;
 }
 
@@ -127,7 +127,7 @@ void Global::initSim(){
         }
     }
     //  Tableの初期化
-    table = new Table;
+    table = new Table[num_decmod];
     //  Dramの初期化
     dram = new Dram;
     //  PCAPの読み込み
@@ -205,8 +205,8 @@ void Global::reportResult(){
 }*/
 
 void Global::inputPacket(Packet p){
-    //  CRCハッシュ値の計算
-  /* CRC crc;
+  /*   //  CRCハッシュ値の計算
+  CRC crc;
     crc.Align(next_p);
     next_p.id = ++pcount;
     next_p.hash = crc.Calc(8, 13) % num_decmod;
@@ -225,8 +225,8 @@ void Global::inputPacket(Packet p){
     is.str(line);
     is >> next_p.timestamp >> next_p.length >> sip >> dip >> next_p.protocol >> next_p.sport >> next_p.dport >> next_p.comp_len >> next_p.decomp_len >> next_p.comp_ratio >> next_p.stream_num >> next_p.flow_size;
     ip.str(sip);
-    //next_p.timestamp = double(num_packet)/(1000*1000*1000);
-    proc_size += next_p.length;//***
+    next_p.timestamp = double(num_packet)/(1000*1000*1000);
+    if(num_packet>=10001){proc_size += next_p.length;}//***
     int i=0;
     while(getline(ip, sip, '.')){
         next_p.sip[i] = (unsigned char)atoi(sip.c_str());
@@ -244,16 +244,21 @@ void Global::inputPacket(Packet p){
     next_p.flow_id = ss.str();
     num_of_ReadedPacket ++;
 
+    //next_p.timestamp = double(num_packet)/(1000*1000*1000);
+    /*e = pair<Func, Packet>(&Global::inputPacket, next_p);
+      event_handler.insert(pair<double, Event>(next_p.timestamp, e));*/
     CRC crc;
     crc.Align(next_p);
     //next_p.id = ++pcount; ??
     next_p.hash = crc.Calc(8, 13) % num_decmod;
     //  decmodのqueueに詰めるイベントを登録
-    //cout << "debug:Z" << endl;
+    //cout << next_p.id << endl;
     Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
     event_handler.insert(pair<double, Event>(next_p.timestamp, e));
-//    next_p.Show();
+    //    next_p.Show();*/
 }
+
+
 
 void Global::inputQueue(Packet p){
   //cout << "debug:inputQ " << num_packet << endl;
@@ -267,21 +272,21 @@ void Global::outputQueue(Packet p){
 void Global::accessTable(Packet p){
     Event e;
     //cout << "debug:AT" << num_packet << endl;
-    if(p.timestamp >= table->next_time){
+    if(p.timestamp >= table[p.hash].next_time){
       p.timestamp += delay_table;
-      p.cache_num = table->Access(p);
+      p.cache_num = table[p.hash].Access(p);
         if(p.cache_num == -1){
-	  table->UpdateReadedSize(p);//(add)0702
-	  if(table->GetReadedSize(p) > p.flow_size - p.comp_len){
-	    p.length = table->GetReadedSize(p) - p.flow_size + p.comp_len;
+	  table[p.hash].UpdateReadedSize(p);//(add)0702
+	  if(table[p.hash].GetReadedSize(p) > p.flow_size - p.comp_len){
+	    p.length = table[p.hash].GetReadedSize(p) - p.flow_size + p.comp_len;
             e = pair<Func, Packet>(&Global::decodeFirstPacket, p);
 	    }else{
 	    e = pair<Func, Packet>(&Global::through, p);
 	     }
         }else{
             //  not first packet
-	  table->UpdateReadedSize(p);//(add)0702
-	  if(table->GetReadedSize(p) > p.flow_size - p.comp_len){
+	  table[p.hash].UpdateReadedSize(p);//(add)0702
+	  if(table[p.hash].GetReadedSize(p) > p.flow_size - p.comp_len){
 	    e = pair<Func, Packet>(&Global::accessCache, p);
 	  }else{
 	    e = pair<Func, Packet>(&Global::through, p);
@@ -289,7 +294,7 @@ void Global::accessTable(Packet p){
         }
     }else{
       //cout << "debug " << num_packet << "," << p.timestamp << endl;
-      p.timestamp = table->next_time;
+      p.timestamp = table[p.hash].next_time;
       e = pair<Func, Packet>(&Global::accessTable, p);
     }
     event_handler.insert(pair<double, Event>(p.timestamp, e));
@@ -297,7 +302,7 @@ void Global::accessTable(Packet p){
 
 void Global::accessCache(Packet p){
     Event e;
-    cout << "ID:" << p.id << "\tCacheAccsess:cache" << p.cache_num << endl;
+    //cout << "ID:" << p.id << "\tCacheAccsess:cache" << p.cache_num << endl;
     if(p.timestamp >= cache[p.cache_num].next_time_read){
         p.timestamp += delay_cache;
         if(cache[p.cache_num].Access(p)){   //  HIT
@@ -330,6 +335,7 @@ void Global::accessDram(Packet p){
 
 void Global::decodeFirstPacket(Packet p){
     p.timestamp += delay_makehuff + delay_decode;
+    //cout << p.id << endl;
     Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
     event_handler.insert(pair<double, Event>(p.timestamp, e));
 }
@@ -342,9 +348,9 @@ void Global::decodePacket(Packet p){
     unsigned long new_dict_size;
     u_int current_cache_size;
     u_int current_cache_amount;
-    new_dict_size = table->GetCurrentSize(p) + (p.length /p.comp_ratio);
-    current_cache_size = table->GetCacheInfo(p).first;
-    current_cache_amount = table->GetCacheInfo(p).second;
+    new_dict_size = table[p.hash].GetCurrentSize(p) + (p.length /p.comp_ratio);
+    current_cache_size = table[p.hash].GetCacheInfo(p).first;
+    current_cache_amount = table[p.hash].GetCacheInfo(p).second;
     
     //(add)予測を超えた場合の処理
     if(new_dict_size >= current_cache_size * 1024 && current_cache_size < 32){
@@ -376,6 +382,7 @@ void Global::updateFirstPacket(Packet p){
     map<u_int, pair<u_int, u_int> >::iterator it = num_eachcache.begin();
     unsigned long ratio; // comp_len * ratio = decomp_len(予測値)
     ratio = 3.0;
+    //cout << p.id << endl;
     while(it != num_eachcache.end()){
 #ifdef STREAM_SIZE_PREDICTION
       if(p.comp_len * ratio < it->first * 1024){break;}  //予測有
@@ -391,23 +398,34 @@ void Global::updateFirstPacket(Packet p){
     p.info_current_cache.first = it->first; //(add)現在のエントリサイズを記録
     p.info_current_cache.second = it->second.second; //* 32 / p.info_current_cache.first; //(add)現在のエントリサイズを持つキャッシュの個数
 #endif
+    /* cache[p.cache_num].Insert(p);
+    table[p.hash].Update(p);
+    mod[p.hash].status = 0;
+    end_time = p.timestamp;
+    inputPacket(p);
+    if(mod[p.hash].q.size() != 0){
+      cout << "upoutQ" << endl;
+      Event e = pair<Func, Packet>(&Global::outputQueue, p);
+      event_handler.insert(pair<double, Event>(p.timestamp, e));
+      }*/
     if(p.timestamp >= cache[p.cache_num].next_time_write){
       cache[p.cache_num].Insert(p);
-      cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
-      cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
+      //cout << "IDA:" << p.id << "\tmiss:" << p.cache_miss;
+      //cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
       while(true){
-	if(p.timestamp >= table->next_time){
-	  table->Update(p);
+	if(p.timestamp >= table[p.hash].next_time){
+	  table[p.hash].Update(p);
 	  break;
 	}else{
-	  p.timestamp = table->next_time;
+	  p.timestamp = table[p.hash].next_time;
 	}
       }
       mod[p.hash].status = 0;
       end_time = p.timestamp;
       if(mod[p.hash].q.size() != 0){
-        Event e = pair<Func, Packet>(&Global::outputQueue, p);
-        event_handler.insert(pair<double, Event>(p.timestamp, e));
+	//cout << "a" << endl;
+	Event e = pair<Func, Packet>(&Global::outputQueue, p);
+	event_handler.insert(pair<double, Event>(p.timestamp, e));
       }else{
 	//cout << "debug.upfp: " << p.cache_num << endl;
 	inputPacket(p);
@@ -416,10 +434,24 @@ void Global::updateFirstPacket(Packet p){
       p.timestamp = cache[p.cache_num].next_time_write;
       Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
       event_handler.insert(pair<double, Event>(p.timestamp, e));
-    }
+      }
 }
 
 void Global::updatePacket(Packet p){
+  /*if(p.cache_miss == 1){
+    cache[p.cache_num].Insert(p);
+  }else{
+    cache[p.cache_num].Update(p);
+  }
+  table[p.hash].Update(p);
+  mod[p.hash].status = 0;
+  end_time = p.timestamp;
+  inputPacket(p);
+  if(mod[p.hash].q.size() != 0){
+    cout << "upoutQ" << endl;
+    Event e = pair<Func, Packet>(&Global::outputQueue, p);
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+    }*/
   if(p.timestamp >= cache[p.cache_num].next_time_write){
     p.timestamp += delay_cache;
     if(p.cache_miss == 1){
@@ -428,22 +460,23 @@ void Global::updatePacket(Packet p){
     }else{
       cache[p.cache_num].Update(p);
     }
-    cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
-    cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
+    //cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
+    //cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
     //Tableアクセス処理
     while(true){//Acsess
-      if(p.timestamp >= table->next_time){
+      if(p.timestamp >= table[p.hash].next_time){
 	p.timestamp += delay_table;
-	table->Update(p);
+	table[p.hash].Update(p);
 	mod[p.hash].status = 0;
 	end_time = p.timestamp;
 	break;
       }else{//Wait
-	p.timestamp = table->next_time;
+	p.timestamp = table[p.hash].next_time;
       }
     }
     
     if(mod[p.hash].q.size() != 0){
+      //cout << "A" << endl;
       Event e = pair<Func, Packet>(&Global::outputQueue, p);
       event_handler.insert(pair<double, Event>(p.timestamp, e));
     }else{
@@ -453,7 +486,7 @@ void Global::updatePacket(Packet p){
     p.timestamp = cache[p.cache_num].next_time_write;
     Event e = pair<Func, Packet>(&Global::updatePacket, p);
     event_handler.insert(pair<double, Event>(p.timestamp, e));
-  }
+    }
 }
 
 void Global::processEvent(){

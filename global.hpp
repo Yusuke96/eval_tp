@@ -2,6 +2,9 @@
 
 class Global{
 public:
+  //arg
+  vector<string> arg_str;
+  vector<string> option;
   //  PARAMETER
   //  Simulation time
   double time;
