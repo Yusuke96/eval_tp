@@ -1,11 +1,18 @@
 #include "main.hpp"
 #include <iomanip>
-
+vector<int> res;
 Global::Global(){
   time=0.0;
   start_time=0.0;
   end_time=0.0;
   proc_size=0.0;
+  table_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  table_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  cache_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  cache_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  dram_stall_time=0.0;
+  dram_stall_count=0.0;
+  res={0,0,0,0,0,0,0,0};
   tracefile="";
   input.clear();
   resfile="";
@@ -155,6 +162,7 @@ void Global::showResult(){
 void Global::reportResult(){
     cout << "------------------RESULT---------------------" << endl;
     cout << "# of Packets: " << num_packet << endl;
+    cout << "# of Flow: " << table->tag.size() << endl;
     cout << "# of Packet drops: " << num_drop << endl;
     cout << "# of Read through: " << num_of_through << endl;
     cout << "# of prediction miss: " << num_prediction_miss << endl;
@@ -163,7 +171,38 @@ void Global::reportResult(){
     cout << "Process time: " << end_time - start_time << "sec" << endl;
     cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
     cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
-    cout << table->tag.size() << endl;
+    cout << "------------------DEBUG----------------------" << endl;
+
+    cout << "** Flow info **" << endl;
+    cout << "# of Flow: " << table->tag.size() << endl;
+    cout << endl;
+    
+    cout << "** Table info **" << endl;
+    for(int i=0;i<8;i++){
+      cout << "Table[" << i << "] stall count: " << table_stall_count[i] << endl;
+	}
+    for(int i=0;i<8;i++){
+      cout << "Table[" << i << "] stall time: " << table_stall_time[i] << endl;
+	}
+    cout << endl;
+
+    cout << "** Cache info **" << endl;
+    for(int i=0;i<8;i++){
+      cout << "# of Flow to Cache[" << i << "]: " << res[i] << endl;
+    }
+    for(int i=0;i<8;i++){
+      cout << "Cache[" << i << "] stall count: " << cache_stall_count[i] << endl;
+    }
+    for(int i=0;i<8;i++){
+      cout << "Cache[" << i << "] stall time: " << cache_stall_time[i] << endl;
+    }
+    cout << endl;
+
+    cout << "** Dram info **" << endl;
+    cout << "Dram stall count: " << dram_stall_count << endl;
+    cout << "Dram stall time: " << dram_stall_time << endl;
+    cout << "---------------------------------------------" << endl;
+    
     exit(1);
 }
 
@@ -293,7 +332,14 @@ void Global::accessTable(Packet p){
 	  }
         }
     }else{
-      //cout << "debug " << num_packet << "," << p.timestamp << endl;
+      if(num_packet >= 10001){
+	table_stall_count[p.hash] += 1; //ストール回数のインクリ
+	if(table[p.hash].next_time - p.timestamp >= delay_table){
+	  table_stall_time[p.hash] += delay_table;
+	}else{
+	  table_stall_time[p.hash] += table[p.hash].next_time - p.timestamp;
+	}
+      }
       p.timestamp = table[p.hash].next_time;
       e = pair<Func, Packet>(&Global::accessTable, p);
     }
@@ -304,6 +350,7 @@ void Global::accessCache(Packet p){
     Event e;
     //cout << "ID:" << p.id << "\tCacheAccsess:cache" << p.cache_num << endl;
     if(p.timestamp >= cache[p.cache_num].next_time_read){
+      //cout << p.cache_num << endl;
         p.timestamp += delay_cache;
         if(cache[p.cache_num].Access(p)){   //  HIT
             p.cache_miss = 0;
@@ -313,8 +360,17 @@ void Global::accessCache(Packet p){
             e = pair<Func, Packet>(&Global::accessDram, p);
         }
     }else{
-        p.timestamp = cache[p.cache_num].next_time_read;
-        e = pair<Func, Packet>(&Global::accessCache, p);
+      //cout << p.cache_num << endl;
+      if(num_packet >= 10001){
+	cache_stall_count[p.cache_num] += 1;
+	if(cache[p.cache_num].next_time_read - p.timestamp >= delay_cache){
+	  cache_stall_time[p.cache_num] += delay_cache;
+	}else{
+	  cache_stall_time[p.cache_num] += cache[p.cache_num].next_time_read - p.timestamp;
+	}
+      }	
+      p.timestamp = cache[p.cache_num].next_time_read;
+      e = pair<Func, Packet>(&Global::accessCache, p);
     }
     //cout << p.cache_miss << endl;
     event_handler.insert(pair<double, Event>(p.timestamp, e));
@@ -327,8 +383,17 @@ void Global::accessDram(Packet p){
         dram->Access(p);
         e = pair<Func, Packet>(&Global::decodePacket, p);
     }else{
-        p.timestamp = dram->next_time;
-        e = pair<Func, Packet>(&Global::accessDram, p);
+      //cout << dram->next_time - p.timestamp << endl;
+      if(num_packet >= 10001){
+	dram_stall_count += 1;
+	if(dram->next_time - p.timestamp > 0.000008){
+	  dram_stall_time += 0.000008;
+	}else{
+	  dram_stall_time += dram->next_time - p.timestamp;
+	}
+      }
+      p.timestamp = dram->next_time;
+      e = pair<Func, Packet>(&Global::accessDram, p);
     }
     event_handler.insert(pair<double, Event>(p.timestamp, e));
 }
@@ -394,20 +459,12 @@ void Global::updateFirstPacket(Packet p){
     if(it == num_eachcache.end()){it--;}
     //  そのサイズのキャッシュが複数ある場合，(hash値 % そのサイズキャッシュの個数)により割り振り
     p.cache_num = it->second.first - p.hash % it->second.second; //末尾のキャッシュ番号から引く
+    //cout << p.cache_num << endl;
+    res[p.cache_num] += 1;
 #ifdef STREAM_SIZE_PREDICTION
     p.info_current_cache.first = it->first; //(add)現在のエントリサイズを記録
     p.info_current_cache.second = it->second.second; //* 32 / p.info_current_cache.first; //(add)現在のエントリサイズを持つキャッシュの個数
 #endif
-    /* cache[p.cache_num].Insert(p);
-    table[p.hash].Update(p);
-    mod[p.hash].status = 0;
-    end_time = p.timestamp;
-    inputPacket(p);
-    if(mod[p.hash].q.size() != 0){
-      cout << "upoutQ" << endl;
-      Event e = pair<Func, Packet>(&Global::outputQueue, p);
-      event_handler.insert(pair<double, Event>(p.timestamp, e));
-      }*/
     if(p.timestamp >= cache[p.cache_num].next_time_write){
       cache[p.cache_num].Insert(p);
       //cout << "IDA:" << p.id << "\tmiss:" << p.cache_miss;
@@ -417,9 +474,13 @@ void Global::updateFirstPacket(Packet p){
 	  table[p.hash].Update(p);
 	  break;
 	}else{
+	  if(num_packet >= 10001){
+	  table_stall_time_total += table[p.hash].next_time - p.timestamp;
+	  }
 	  p.timestamp = table[p.hash].next_time;
 	}
       }
+      mod[p.hash].Update(p);
       mod[p.hash].status = 0;
       end_time = p.timestamp;
       if(mod[p.hash].q.size() != 0){
@@ -431,6 +492,8 @@ void Global::updateFirstPacket(Packet p){
 	inputPacket(p);
       }
     }else{
+      //cout << "cache stall w" << endl;
+      cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
       p.timestamp = cache[p.cache_num].next_time_write;
       Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
       event_handler.insert(pair<double, Event>(p.timestamp, e));
@@ -467,10 +530,14 @@ void Global::updatePacket(Packet p){
       if(p.timestamp >= table[p.hash].next_time){
 	p.timestamp += delay_table;
 	table[p.hash].Update(p);
+	mod[p.hash].Update(p);
 	mod[p.hash].status = 0;
 	end_time = p.timestamp;
 	break;
       }else{//Wait
+	if(num_packet >= 10001){
+	table_stall_time_total += table[p.hash].next_time - p.timestamp;
+	}
 	p.timestamp = table[p.hash].next_time;
       }
     }
@@ -483,6 +550,8 @@ void Global::updatePacket(Packet p){
       inputPacket(p);
     }
   }else{
+    //cout << "cache atall w" << endl; 
+    cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
     p.timestamp = cache[p.cache_num].next_time_write;
     Event e = pair<Func, Packet>(&Global::updatePacket, p);
     event_handler.insert(pair<double, Event>(p.timestamp, e));

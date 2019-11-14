@@ -2,6 +2,7 @@
 #include<iomanip>
 Decmod::Decmod(){
   status=false;//free
+  recent_time = 0.0;
 }
 
 Decmod::~Decmod(){;}
@@ -29,8 +30,12 @@ void Decmod::Dequeue(Packet *tmp_p){
       p = q.front();
       //cout << "debug:[pop]" << p.hash << endl;
       q.pop();
-      p.timestamp = tmp_p->timestamp;
+      p.timestamp = recent_time;
       Global::Event e = pair<Global::Func, Packet>(&Global::accessTable, p);
       global.event_handler.insert(pair<double, Global::Event>(p.timestamp, e));
     }
+}
+
+void Decmod::Update(Packet p){
+  recent_time = p.timestamp;
 }

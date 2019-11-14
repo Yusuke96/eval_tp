@@ -12,8 +12,8 @@ int Table::Access(Packet p){
     if(tag.count(p.flow_id) == 0){
         return -1;    // TABLE MISS
     }else{
-        //  TABLE HIT
-        return tag[p.flow_id].cache_num;
+      //  TABLE HIT
+      return tag[p.flow_id].cache_num;
     }
 }
 

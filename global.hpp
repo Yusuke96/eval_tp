@@ -11,6 +11,14 @@ public:
   double end_time;
   double start_time;
   double proc_size;
+  double table_stall_time_total;
+  vector<double> table_stall_time;
+  vector<double> table_stall_count;
+  double dram_stall_time;
+  double dram_stall_count;
+  double cache_stall_time_total;
+  vector<double> cache_stall_time;
+  vector<double> cache_stall_count;
   //  Config parameter
   string tracefile;
   ifstream input;
