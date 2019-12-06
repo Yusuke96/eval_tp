@@ -1,11 +1,13 @@
 #include "main.hpp"
 #include<iomanip>
+
 Decmod::Decmod(){
   status=false;//free
   recent_time = 0.0;
 }
 
-Decmod::~Decmod(){;}
+Decmod::~Decmod(){
+}
 
 void Decmod::Enqueue(Packet *p){
     if(q.size() >= global.size_queue){

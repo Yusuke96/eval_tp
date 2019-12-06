@@ -16,15 +16,24 @@ public:
   vector<double> table_stall_count;
   double dram_stall_time;
   double dram_stall_count;
+  double dram_request_count;
   double cache_stall_time_total;
+  double cache_access_count;
   vector<double> cache_stall_time;
   vector<double> cache_stall_count;
+  //decode procedure counter
+  double table_hit_cache_hit;
+  double table_hit_cache_miss;
+  double table_miss_decode_first_packet;
+  double dont_cache_decode_first_packet;
+  double dont_cache_decode_following_packet;
   //  Config parameter
   string tracefile;
   ifstream input;
   string resfile;
   ofstream output;
   int num_prediction_miss;
+  int num_dontcache;
   u_int num_cache;
   vector<u_int> conf_cache;
   map<u_int, pair<u_int, u_int> > num_eachcache; //<targetsize(32,16,8,4,2), lastcachenum(0~7), amount(0~)>
