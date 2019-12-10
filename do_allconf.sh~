@@ -1,0 +1,3 @@
+#!/bin/sh
+
+num=`ls $2 | awk -F'f' {print $2}`

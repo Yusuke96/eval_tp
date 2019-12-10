@@ -1,0 +1,75 @@
+------------------CONFIG---------------------
+TRACEFILE /home/yusuke/work/cachesim/testTrace_headercut_1000000l.tsv
+RESFILE test
+CACHENUMBER 8
+CACHEASSIGN 32KB->3 16KB->1 4KB->1 2KB->3 
+CACHEDELAY 1e-09
+DECMODNUMBER 8
+GZIPDECDELAY 4e-09
+MAKEHUFFDELAY 2.6e-06
+QUEUESIZE 100000000
+TABLEDELAY 1e-09
+DRAMDELAY 8e-06
+------------------RESULT---------------------
+# of Packets: 1000000
+# of Flow: 22839
+# of Packet drops: 0
+# of Read through: 321012
+# of prediction miss: 8542
+# of Cache hits: 315449
+Cache hit rate: 0.464587
+Process time: 1.46778sec
+Process size: 806.213MByte
+Throughput: 4394.18Mbps
+------------------DEBUG----------------------
+** Flow info **
+# of Flow: 22839
+
+** Table info **
+Table[0] stall count: 40257
+Table[1] stall count: 40427
+Table[2] stall count: 39899
+Table[3] stall count: 40698
+Table[4] stall count: 39836
+Table[5] stall count: 40156
+Table[6] stall count: 39981
+Table[7] stall count: 39789
+Table[0] stall time: 4.0257e-05
+Table[1] stall time: 4.0427e-05
+Table[2] stall time: 3.9899e-05
+Table[3] stall time: 4.0698e-05
+Table[4] stall time: 3.9836e-05
+Table[5] stall time: 4.0156e-05
+Table[6] stall time: 3.9981e-05
+Table[7] stall time: 3.9789e-05
+
+** Cache info **
+# of Flow to Cache[0]: 8593
+# of Flow to Cache[1]: 14301
+# of Flow to Cache[2]: 14343
+# of Flow to Cache[3]: 91224
+# of Flow to Cache[4]: 27598
+# of Flow to Cache[5]: 22649
+# of Flow to Cache[6]: 36812
+# of Flow to Cache[7]: 36535
+Cache[0] stall count: 5199
+Cache[1] stall count: 12500
+Cache[2] stall count: 12271
+Cache[3] stall count: 36090
+Cache[4] stall count: 1470
+Cache[5] stall count: 238
+Cache[6] stall count: 659
+Cache[7] stall count: 674
+Cache[0] stall time: 5.199e-06
+Cache[1] stall time: 1.25e-05
+Cache[2] stall time: 1.2271e-05
+Cache[3] stall time: 3.609e-05
+Cache[4] stall time: 1.47e-06
+Cache[5] stall time: 2.38e-07
+Cache[6] stall time: 6.59e-07
+Cache[7] stall time: 6.74e-07
+
+** Dram info **
+Dram stall count: 126550
+Dram stall time: 0.990159
+---------------------------------------------

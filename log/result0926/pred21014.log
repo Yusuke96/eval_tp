@@ -1,0 +1,23 @@
+------------------CONFIG---------------------
+TRACEFILE /home/yusuke/work/cachesim/testTrace_headercut_1000000l.tsv
+RESFILE test
+CACHENUMBER 8
+CACHEASSIGN 32KB->2 16KB->1 4KB->1 2KB->4 
+CACHEDELAY 1e-09
+DECMODNUMBER 8
+GZIPDECDELAY 4e-09
+MAKEHUFFDELAY 2.6e-06
+QUEUESIZE 100000000
+TABLEDELAY 1e-12
+DRAMDELAY 8e-06
+------------------RESULT---------------------
+# of Packets: 1000000
+# of Packet drops: 0
+# of Read through: 321012
+# of prediction miss: 8543
+# of Cache hits: 307054
+Cache hit rate: 0.452223
+Process time: 1.53605sec
+Process size: 806.213MByte
+Throughput: 4198.89Mbps
+22839

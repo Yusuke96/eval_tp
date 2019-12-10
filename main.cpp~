@@ -1,0 +1,21 @@
+#include "main.hpp"
+
+Global global;
+
+int main(int argc, char *argv[])
+{
+  Packet p;
+    global.readConf(argc, argv);
+    global.showConf();
+    global.initSim();
+    // global.inputFirstpacket();
+    for(int i=0; i<100; i++){
+      //cout << "done:" << i << endl;
+      global.inputPacket(p);
+    }
+    for(;;){
+      //cout << "done" << endl;
+      global.processEvent();
+      }
+    return 0;
+}

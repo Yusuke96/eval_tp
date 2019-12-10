@@ -1,0 +1,477 @@
+#include "main.hpp"
+#include <iomanip>
+
+Global::Global(){
+  time=0.0;
+  start_time=0.0;
+  end_time=0.0;
+  proc_size=0.0;
+  tracefile="";
+  input.clear();
+  resfile="";
+  output.clear();
+  num_cache=0;
+  num_prediction_miss=0;
+  conf_cache.clear();
+  num_eachcache.clear();
+  num_decmod=0;
+  size_queue=0;
+  delay_cache=0.0;
+  delay_decode=0.0;
+  delay_makehuff=0.0;
+  delay_table=0.0;
+  delay_dram=0.0;
+  event_handler.clear();
+  mod=nullptr;
+  cache=nullptr;
+  table=nullptr;
+  num_packet=0;
+  num_drop=0;
+  num_hit=0;
+  num_of_through=0;
+  res_sec=1;
+  nt=0;
+  np=0;
+  nd=0;
+  nh=0;
+  pcount=0;
+  num_of_ReadedPacket=0;
+}
+
+Global::~Global(){
+	delete[] mod;
+	delete[] cache;
+    delete table;
+    delete dram;
+}
+
+void Global::readConf(int argc, char *argv[]){
+    if(argc >= 2){
+        istringstream is;
+        string line, tag, val;
+        ifstream conffile(argv[1], ifstream::in);
+        if(!conffile.is_open()){
+            cout << "Error: config file does not exist." << endl;
+            exit(-1);
+        }
+        while(getline(conffile, line)){
+            if(line.size() == 0){continue;}
+            is.clear(), tag = "", val = "";
+            is.str(line);
+            is >> tag >> val;
+            if(!tag.compare("TRACEFILE")){tracefile = val;}
+            if(!tag.compare("RESFILE")){resfile = val;}
+            if(!tag.compare("CACHENUMBER")){num_cache = (u_int)stoi(val);}
+            if(!tag.compare("CACHEASSIGN")){
+                for(unsigned int n=0; n<num_cache; n++){
+                    u_int i = (u_int)stoi(val);
+                    conf_cache.push_back(i);
+                    num_eachcache[i].first = n;  //  そのサイズのキャッシュが最後に出てくるキャッシュ番号
+                    num_eachcache[i].second += 1;    //  そのサイズのキャッシュの個数
+                    is >> val;
+                }
+				if(num_eachcache.count(32) == 0){
+					cout << "Error: at least 1 cache is 32KB." << endl;
+					exit(-1);
+				}
+            }
+            if(!tag.compare("CACHEDELAY")){delay_cache = stod(val);}
+            if(!tag.compare("DECMODNUMBER")){num_decmod = (u_int) stoi(val);}
+            if(!tag.compare("GZIPDECDELAY")){delay_decode = stod(val);}
+            if(!tag.compare("MAKEHUFFDELAY")){delay_makehuff = stod(val);}
+            if(!tag.compare("QUEUESIZE")){size_queue = (u_int) stoi(val);}
+            if(!tag.compare("TABLEDELAY")){delay_table = stod(val);}
+            if(!tag.compare("DRAMDELAY")){delay_dram = stod(val);}
+        }
+        conffile.close();
+    }else{
+        cout << "Error: the number of argument is inappropriate." << endl;
+        exit(-1);
+    }
+}
+
+void Global::showConf(){
+    cout << "------------------CONFIG---------------------" << endl;
+    cout << "TRACEFILE " << tracefile << endl;
+    cout << "RESFILE " << resfile << endl;
+    cout << "CACHENUMBER " << num_cache << endl;
+    cout << "CACHEASSIGN ";
+    map<u_int, pair<u_int, u_int> >::reverse_iterator it = num_eachcache.rbegin();
+        while(it != num_eachcache.rend()){
+            cout << it->first << "KB->" << it->second.second << " ";
+            it++;
+        }
+    cout << endl;
+    cout << "CACHEDELAY " << delay_cache << endl;
+    cout << "DECMODNUMBER " << num_decmod << endl;
+    cout << "GZIPDECDELAY " << delay_decode << endl;
+    cout << "MAKEHUFFDELAY " << delay_makehuff << endl;
+    cout << "QUEUESIZE " << size_queue << endl;
+    cout << "TABLEDELAY " << delay_table << endl;
+    cout << "DRAMDELAY " << delay_dram << endl;
+}
+
+void Global::initSim(){
+    //  Decoding Moduleの初期化
+    mod = new Decmod[num_decmod];
+    //  Cacheの初期化
+    cache = new Cache[num_cache];
+    for(unsigned int n=0; n<num_cache; n++){
+        cache[n].size = conf_cache[n];
+        cache[n].num_entry = 32 / conf_cache[n];
+	//Cacheごとのline数を計算(ex.32KB->1)
+        if(cache[n].num_entry < 4){
+            cache[n].num_line = 1;
+        }else{
+            cache[n].num_line = cache[n].num_entry / 4; // 4wayを想定
+        }
+    }
+    //  Tableの初期化
+    table = new Table;
+    //  Dramの初期化
+    dram = new Dram;
+    //  PCAPの読み込み
+    input.open(tracefile.c_str(), ifstream::in);
+    if(!input.is_open()){
+        cout << "Error: trace file does not exist." << endl;
+        exit(-1);
+    }
+    //  出力ファイルの作成
+    output.open(resfile.c_str(), ofstream::out);
+    if(!output.is_open()){
+        cout << "Error: result file cannot open." << endl;
+        exit(-1);
+    }
+}
+
+void Global::showResult(){
+  cout << res_sec << " sec\t"<< num_packet - np << " packets\t" << num_drop - nd << " drops\t" << num_of_through - nt << " troughs\t" << ((double)(num_hit - nh)/((double)(num_packet - np)-(double)(num_of_through - nt))) << " hit_ratio" << endl;
+	np = num_packet;
+	nd = num_drop;
+	nt = num_of_through;
+	nh = num_hit;
+}
+
+void Global::reportResult(){
+    cout << "------------------RESULT---------------------" << endl;
+    cout << "# of Packets: " << num_packet << endl;
+    cout << "# of Packet drops: " << num_drop << endl;
+    cout << "# of Read through: " << num_of_through << endl;
+    cout << "# of prediction miss: " << num_prediction_miss << endl;
+    cout << "# of Cache hits: " << num_hit << endl;
+    cout << "Cache hit rate: " << (double)num_hit/( (double)num_packet - num_of_through) << endl;
+    cout << "Process time: " << end_time - start_time << "sec" << endl;
+    cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
+    cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
+    cout << table->tag.size() << endl;
+    exit(1);
+}
+
+/*void Global::inputFirstpacket(){
+    //  pcapから1行読み出す
+    string line;
+    getline(input, line);
+    if(input.eof()){
+		cout<<"END"<<endl;
+		exit(0);
+	}
+    num_packet++;
+    istringstream is, ip;
+    string sip, dip;
+    is.str(line);
+    is >> next_p.timestamp >> next_p.length >> sip >> dip >> next_p.protocol >> next_p.sport >> next_p.dport >> next_p.comp_len >> next_p.decomp_len >> next_p.comp_ratio >> next_p.stream_num >> next_p.flow_size;
+    ip.str(sip);
+    next_p.timestamp = double(num_packet)/(1000*1000*1000);
+    int i=0;
+    while(getline(ip, sip, '.')){
+        next_p.sip[i] = (unsigned char)atoi(sip.c_str());
+        i++;
+    }
+    ip.clear();
+    ip.str(dip);
+    i=0;
+    while(getline(ip, dip, '.')){
+        next_p.dip[i] = (unsigned char)atoi(dip.c_str());
+        i++;
+    }
+    stringstream ss;
+    ss << next_p.sip[0] << next_p.sip[1] << next_p.sip[2] << next_p.sip[3] << next_p.dip[0] << next_p.dip[1] << next_p.dip[2] << next_p.dip[3] << next_p.sport << next_p.dport << next_p.protocol;
+    next_p.flow_id = ss.str();
+    //  読み出したパケットが次に実行されるイベント(時間，関数，パケット)をevent_handlerに登録
+    num_of_ReadedPacket ++;
+    Event e = pair<Func, Packet>(&Global::inputPacket, next_p);
+    event_handler.insert(pair<double, Event>(next_p.timestamp, e));
+//      p.Show();
+}*/
+
+void Global::inputPacket(Packet p){
+    //  CRCハッシュ値の計算
+  /* CRC crc;
+    crc.Align(next_p);
+    next_p.id = ++pcount;
+    next_p.hash = crc.Calc(8, 13) % num_decmod;
+    //  decmodのqueueに詰めるイベントを登録
+    Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
+    event_handler.insert(pair<double, Event>(next_p.timestamp, e));*/
+    //  次パケットを読み出して最初の処理イベント登録
+    string line;
+    getline(input, line);
+    if(input.eof()){reportResult();}    //  Simulation の終了
+    num_packet++;
+    next_p.id = num_packet;
+    if(num_packet==10001){start_time=end_time;}
+    istringstream is, ip;
+    string sip, dip;
+    is.str(line);
+    is >> next_p.timestamp >> next_p.length >> sip >> dip >> next_p.protocol >> next_p.sport >> next_p.dport >> next_p.comp_len >> next_p.decomp_len >> next_p.comp_ratio >> next_p.stream_num >> next_p.flow_size;
+    ip.str(sip);
+    //next_p.timestamp = double(num_packet)/(1000*1000*1000);
+    proc_size += next_p.length;//***
+    int i=0;
+    while(getline(ip, sip, '.')){
+        next_p.sip[i] = (unsigned char)atoi(sip.c_str());
+        i++;
+    }
+    ip.clear();
+    ip.str(dip);
+    i=0;
+    while(getline(ip, dip, '.')){
+        next_p.dip[i] = (unsigned char)atoi(dip.c_str());
+        i++;
+    }
+    stringstream ss;
+    ss << next_p.sip[0] << next_p.sip[1] << next_p.sip[2] << next_p.sip[3] << next_p.dip[0] << next_p.dip[1] << next_p.dip[2] << next_p.dip[3] << next_p.sport << next_p.dport << next_p.protocol;
+    next_p.flow_id = ss.str();
+    num_of_ReadedPacket ++;
+
+    CRC crc;
+    crc.Align(next_p);
+    //next_p.id = ++pcount; ??
+    next_p.hash = crc.Calc(8, 13) % num_decmod;
+    //  decmodのqueueに詰めるイベントを登録
+    //cout << "debug:Z" << endl;
+    Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
+    event_handler.insert(pair<double, Event>(next_p.timestamp, e));
+//    next_p.Show();
+}
+
+void Global::inputQueue(Packet p){
+  //cout << "debug:inputQ " << num_packet << endl;
+  mod[p.hash].Enqueue(&p);
+}
+
+void Global::outputQueue(Packet p){
+    mod[p.hash].Dequeue(&p);
+}
+
+void Global::accessTable(Packet p){
+    Event e;
+    //cout << "debug:AT" << num_packet << endl;
+    if(p.timestamp >= table->next_time){
+      p.timestamp += delay_table;
+      p.cache_num = table->Access(p);
+        if(p.cache_num == -1){
+	  table->UpdateReadedSize(p);//(add)0702
+	  if(table->GetReadedSize(p) > p.flow_size - p.comp_len){
+	    p.length = table->GetReadedSize(p) - p.flow_size + p.comp_len;
+            e = pair<Func, Packet>(&Global::decodeFirstPacket, p);
+	    }else{
+	    e = pair<Func, Packet>(&Global::through, p);
+	     }
+        }else{
+            //  not first packet
+	  table->UpdateReadedSize(p);//(add)0702
+	  if(table->GetReadedSize(p) > p.flow_size - p.comp_len){
+	    e = pair<Func, Packet>(&Global::accessCache, p);
+	  }else{
+	    e = pair<Func, Packet>(&Global::through, p);
+	  }
+        }
+    }else{
+      //cout << "debug " << num_packet << "," << p.timestamp << endl;
+      p.timestamp = table->next_time;
+      e = pair<Func, Packet>(&Global::accessTable, p);
+    }
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+}
+
+void Global::accessCache(Packet p){
+    Event e;
+    cout << "ID:" << p.id << "\tCacheAccsess:cache" << p.cache_num << endl;
+    if(p.timestamp >= cache[p.cache_num].next_time_read){
+        p.timestamp += delay_cache;
+        if(cache[p.cache_num].Access(p)){   //  HIT
+            p.cache_miss = 0;
+            e = pair<Func, Packet>(&Global::decodePacket, p);
+        }else{  //  MISS
+            p.cache_miss = 1;
+            e = pair<Func, Packet>(&Global::accessDram, p);
+        }
+    }else{
+        p.timestamp = cache[p.cache_num].next_time_read;
+        e = pair<Func, Packet>(&Global::accessCache, p);
+    }
+    //cout << p.cache_miss << endl;
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+}
+
+void Global::accessDram(Packet p){
+    Event e;
+    if(p.timestamp >= dram->next_time){
+        p.timestamp += delay_dram;
+        dram->Access(p);
+        e = pair<Func, Packet>(&Global::decodePacket, p);
+    }else{
+        p.timestamp = dram->next_time;
+        e = pair<Func, Packet>(&Global::accessDram, p);
+    }
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+}
+
+void Global::decodeFirstPacket(Packet p){
+    p.timestamp += delay_makehuff + delay_decode;
+    Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+}
+
+void Global::decodePacket(Packet p){
+    p.timestamp += delay_decode;
+    //p.current_dictsize += p.length / p.comp_ratio; //(add)辞書サイズの更新
+#ifdef STREAM_SIZE_PREDICTION
+    //(add)予測を超えたかの判定に用いる情報
+    unsigned long new_dict_size;
+    u_int current_cache_size;
+    u_int current_cache_amount;
+    new_dict_size = table->GetCurrentSize(p) + (p.length /p.comp_ratio);
+    current_cache_size = table->GetCacheInfo(p).first;
+    current_cache_amount = table->GetCacheInfo(p).second;
+    
+    //(add)予測を超えた場合の処理
+    if(new_dict_size >= current_cache_size * 1024 && current_cache_size < 32){
+      map<u_int, pair<u_int, u_int> >::iterator it = num_eachcache.begin();
+      while(it != num_eachcache.end()){
+	if(new_dict_size < it->first * 1024){break;}
+	it++;
+      }
+      if(it == num_eachcache.end()){it--;}
+      p.info_current_cache.first = it->first;//cache_size
+      p.info_current_cache.second = it->second.second; //* 32 / p.info_current_cache.first;//cache_amount(***)
+      //置換防止フラグ解除
+      cache[p.cache_num].Update(p);
+      p.cache_miss = 1;
+      p.cache_num = it->second.first - p.hash % it->second.second;//cache_size内でのcache_num
+      num_prediction_miss += 1;
+    } //キャッシュ番号の更新
+    else{
+      p.info_current_cache.first = current_cache_size;
+      p.info_current_cache.second = current_cache_amount;
+      }     
+#endif
+    Event e = pair<Func, Packet>(&Global::updatePacket, p);
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+}
+
+void Global::updateFirstPacket(Packet p){
+    //  どのキャッシュ番号にキャッシュすればよいか？
+    map<u_int, pair<u_int, u_int> >::iterator it = num_eachcache.begin();
+    unsigned long ratio; // comp_len * ratio = decomp_len(予測値)
+    ratio = 3.0;
+    while(it != num_eachcache.end()){
+#ifdef STREAM_SIZE_PREDICTION
+      if(p.comp_len * ratio < it->first * 1024){break;}  //予測有
+#else
+      if(p.decomp_len < it->first * 1024){break;} //予測無
+#endif
+      it++;
+    }
+    if(it == num_eachcache.end()){it--;}
+    //  そのサイズのキャッシュが複数ある場合，(hash値 % そのサイズキャッシュの個数)により割り振り
+    p.cache_num = it->second.first - p.hash % it->second.second; //末尾のキャッシュ番号から引く
+#ifdef STREAM_SIZE_PREDICTION
+    p.info_current_cache.first = it->first; //(add)現在のエントリサイズを記録
+    p.info_current_cache.second = it->second.second; //* 32 / p.info_current_cache.first; //(add)現在のエントリサイズを持つキャッシュの個数
+#endif
+    if(p.timestamp >= cache[p.cache_num].next_time_write){
+      cache[p.cache_num].Insert(p);
+      cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
+      cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
+      while(true){
+	if(p.timestamp >= table->next_time){
+	  table->Update(p);
+	  break;
+	}else{
+	  p.timestamp = table->next_time;
+	}
+      }
+      mod[p.hash].status = 0;
+      end_time = p.timestamp;
+      if(mod[p.hash].q.size() != 0){
+        Event e = pair<Func, Packet>(&Global::outputQueue, p);
+        event_handler.insert(pair<double, Event>(p.timestamp, e));
+      }else{
+	//cout << "debug.upfp: " << p.cache_num << endl;
+	inputPacket(p);
+      }
+    }else{
+      p.timestamp = cache[p.cache_num].next_time_write;
+      Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
+      event_handler.insert(pair<double, Event>(p.timestamp, e));
+    }
+}
+
+void Global::updatePacket(Packet p){
+  if(p.timestamp >= cache[p.cache_num].next_time_write){
+    p.timestamp += delay_cache;
+    if(p.cache_miss == 1){
+      cache[p.cache_num].Insert(p);
+      //cout << p.id << endl;
+    }else{
+      cache[p.cache_num].Update(p);
+    }
+    cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
+    cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
+    //Tableアクセス処理
+    while(true){//Acsess
+      if(p.timestamp >= table->next_time){
+	p.timestamp += delay_table;
+	table->Update(p);
+	mod[p.hash].status = 0;
+	end_time = p.timestamp;
+	break;
+      }else{//Wait
+	p.timestamp = table->next_time;
+      }
+    }
+    
+    if(mod[p.hash].q.size() != 0){
+      Event e = pair<Func, Packet>(&Global::outputQueue, p);
+      event_handler.insert(pair<double, Event>(p.timestamp, e));
+    }else{
+      inputPacket(p);
+    }
+  }else{
+    p.timestamp = cache[p.cache_num].next_time_write;
+    Event e = pair<Func, Packet>(&Global::updatePacket, p);
+    event_handler.insert(pair<double, Event>(p.timestamp, e));
+  }
+}
+
+void Global::processEvent(){
+    multimap<double, Event>::iterator it = event_handler.begin();
+    /*	if(it->first > (double)res_sec){
+		showResult();
+		res_sec++;
+		}*/
+    (this->*(it->second.first))(it->second.second);
+    event_handler.erase(it);
+}
+
+void Global::through(Packet p){
+  mod[p.hash].status = 0;
+  num_of_through += 1;
+  inputPacket(p);
+}
+
+double Global::getReadedPacket(){
+  return num_of_ReadedPacket;
+}
