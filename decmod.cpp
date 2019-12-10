@@ -1,10 +1,13 @@
 #include "main.hpp"
 #include<iomanip>
+
 Decmod::Decmod(){
   status=false;//free
+  recent_time = 0.0;
 }
 
-Decmod::~Decmod(){;}
+Decmod::~Decmod(){
+}
 
 void Decmod::Enqueue(Packet *p){
     if(q.size() >= global.size_queue){
@@ -13,9 +16,7 @@ void Decmod::Enqueue(Packet *p){
         return;
     }else{
         q.push(*p);
-	//cout << "debug:EQP1" << global.num_packet << " status==" << status << " hash==" << p->hash << endl;
         if(q.size() >= 1 && status == 0){
-	  //cout << "debug:EQP2" << global.num_packet << endl;
             Global::Event e = pair<Global::Func, Packet>(&Global::outputQueue, *p);
             global.event_handler.insert(pair<double, Global::Event>(p->timestamp, e));
         }
@@ -31,8 +32,12 @@ void Decmod::Dequeue(Packet *tmp_p){
       p = q.front();
       //cout << "debug:[pop]" << p.hash << endl;
       q.pop();
-      p.timestamp = tmp_p->timestamp;
+      p.timestamp = recent_time;
       Global::Event e = pair<Global::Func, Packet>(&Global::accessTable, p);
       global.event_handler.insert(pair<double, Global::Event>(p.timestamp, e));
     }
+}
+
+void Decmod::Update(Packet p){
+  recent_time = p.timestamp;
 }

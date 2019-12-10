@@ -8,6 +8,7 @@ public:
   u_int size;
   u_int num_entry;
   u_int num_line;
+  map<string,int> flow; 
   double next_time_read;
   double next_time_write;
   //FUNCTION

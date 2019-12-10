@@ -12,32 +12,36 @@ Cache::Cache(){
 Cache::~Cache(){;}
 
 Packet Cache::Insert(Packet& p){
+  //insert
   CRC crc;
   crc.Align(p);
+  flow[p.flow_id] = 1;
   u_int line;
   next_time_write = p.timestamp;//add0808
   if(num_line==1){
     line = 0;
-    //cout << "P2:" << line << endl;
   }else{
     line = crc.Calc(16, 13) % num_line;//  キャッシュのインデックス用にハッシュ値を別に計算
-    //cout << "P1:" << line << endl; 
   }
   if(tag[line].size() == num_entry || tag[line].size() == 4){
     if(tag[line].back().second == true){       //  この場合，hit->update途中のパケットが処理中なのでキャッシュ登録しない(稀？)
-      //cout << "P3:" << line << endl;
       return p;
     }
     tag[line].pop_back();      // 簡易LRU
   }
-  //cout << "p.num_line:" << line << endl;
   p.line_num = line;
   tag[line].insert(tag[line].begin(), pair<string,bool>(p.flow_id, false));
+
+  //write back
+  
+  
   return p;
 }
 
 bool Cache::Access(Packet p){
   next_time_read = p.timestamp;
+  global.cache_access_count += 1;
+  flow[p.flow_id] = 1;
   CRC crc;
   crc.Align(p);
   u_int line;

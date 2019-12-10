@@ -1,11 +1,16 @@
 #include "main.hpp"
 
 Dram::Dram(){
-    next_time = 0.0;
+  next_time_read = 0.0;
+  next_time_write = 0.0;
 }
 
 Dram::~Dram(){;}
 
-void Dram::Access(Packet p){
-    next_time = p.timestamp;
+void Dram::Read(Packet p){
+  next_time_read = p.timestamp;
+}
+
+void Dram::Write(Packet p){
+  next_time_write = p.timestamp;
 }
