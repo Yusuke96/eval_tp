@@ -220,7 +220,7 @@ void Global::reportResult(){
     cout << "Dram stall time: " << dram_stall_time << endl;
     cout << "---------------------------------------------" << endl;
 
-    cout << "** Check sum**"
+    cout << "** Check sum**";
     
     exit(1);
 }
@@ -258,8 +258,7 @@ void Global::inputPacket(Packet p){
 
     CRC crc;
     crc.Align(next_p);
-    //next_p.id = ++pcount; ??
-    next_p.hash = crc.Calc(8, 13) % num_decmod;
+    next_p.hash = crc.Calc(8, 13) % num_decmod;//num_decmod=8
     //  decmodのqueueに詰めるイベントを登録
     //cout << next_p.id << endl;
     Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
@@ -417,7 +416,7 @@ void Global::decodePacket(Packet p){
     //置換防止フラグ解除
     cache[p.cache_num].Update(p);
     p.cache_miss = 1;
-    p.cache_num = it->second.first - p.hash % it->second.second;//cache_size内でのcache_num
+    p.cache_num = it->second.first - (p.hash+p.sport) % it->second.second;//cache_size内でのcache_num
     num_prediction_miss += 1;
   } //キャッシュ番号の更新
   else{
@@ -470,7 +469,7 @@ void Global::updateFirstPacket(Packet p){
   }
   if(it == num_eachcache.end()){it--;}
   //  そのサイズのキャッシュが複数ある場合，(hash値 % そのサイズキャッシュの個数)により割り振り
-  p.cache_num = it->second.first - p.hash % it->second.second; //末尾のキャッシュ番号から引く
+  p.cache_num = it->second.first - (p.hash+p.sport) % it->second.second; //末尾のキャッシュ番号から引く
   //cout << p.cache_num << endl;
   res[p.cache_num] += 1;
 #ifdef STREAM_SIZE_PREDICTION

@@ -11,7 +11,7 @@ void CRC::Align(Packet p){
 }
 unsigned int CRC::Calc(int bit, unsigned long num){
     switch(bit){
-/*        case 1:
+      /*        case 1:
 			crc_1.reset();
 			crc_1.process_bytes(input, num);
 			return crc_1.checksum();
