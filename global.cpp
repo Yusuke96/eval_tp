@@ -1,8 +1,8 @@
 #include "main.hpp"
 #include <iomanip>
 vector<int> res;
-//#define BYPASSSIZE 500
-//#define DONT_CACHE
+#define BYPASSSIZE 500
+#define DONT_CACHE
 Global::Global(){
   time=0.0;
   start_time=0.0;
@@ -171,18 +171,6 @@ void Global::showResult(){
 }
 
 void Global::reportResult(){
-    cout << "------------------RESULT---------------------" << endl;
-    cout << "# of Packets: " << num_packet << endl;
-    //cout << "# of Flow: " << table->tag.size() << endl;
-    cout << "# of Packet drops: " << num_drop << endl;
-    cout << "# of don't cache: " << num_dontcache << endl;
-    cout << "# of Read through: " << num_of_through << endl;
-    cout << "# of prediction miss: " << num_prediction_miss << endl;
-    cout << "# of Cache hits: " << num_hit << endl;
-    cout << "Cache hit rate: " << (double)num_hit/cache_access_count << endl;
-    cout << "Process time: " << end_time - start_time << "sec" << endl;
-    cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
-    cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
     cout << "------------------DEBUG----------------------" << endl;
 
     cout << "** Decode procedure **" << endl;
@@ -218,9 +206,37 @@ void Global::reportResult(){
     cout << "Dram request count: " << dram_request_count << endl;
     cout << "Dram stall count: " << dram_stall_count << endl;
     cout << "Dram stall time: " << dram_stall_time << endl;
-    cout << "---------------------------------------------" << endl;
+    cout << endl;
 
-    cout << "** Check sum**";
+    cout << "** Check sum **" << endl;
+    if( num_packet
+	-(num_of_through
+	  + table_hit_cache_hit
+	  + table_hit_cache_miss
+	  + table_miss_decode_first_packet
+	  )
+	== 0
+	){
+      cout << "sum each proc branch:TRUE" << endl;
+    }
+    else{
+      cout << "sum easn proc branch:FALSE" << endl;
+    }
+    
+    cout << endl;
+    
+    cout << "------------------RESULT---------------------" << endl;
+    cout << "# of Packets: " << num_packet << endl;
+    //cout << "# of Flow: " << table->tag.size() << endl;
+    cout << "# of Packet drops: " << num_drop << endl;
+    cout << "# of don't cache: " << num_dontcache << endl;
+    cout << "# of Read through: " << num_of_through << endl;
+    cout << "# of prediction miss: " << num_prediction_miss << endl;
+    cout << "# of Cache hits: " << num_hit << endl;
+    cout << "Cache hit rate: " << (double)num_hit/cache_access_count << endl;
+    cout << "Process time: " << end_time - start_time << "sec" << endl;
+    cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
+    cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
     
     exit(1);
 }
