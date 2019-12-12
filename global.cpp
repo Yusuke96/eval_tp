@@ -260,7 +260,6 @@ void Global::inputPacket(Packet p){
     crc.Align(next_p);
     next_p.hash = crc.Calc(8, 13) % num_decmod;//num_decmod=8
     //  decmodのqueueに詰めるイベントを登録
-    //cout << next_p.id << endl;
     Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
     event_handler.insert(pair<double, Event>(next_p.timestamp, e));
 }
@@ -470,7 +469,6 @@ void Global::updateFirstPacket(Packet p){
   if(it == num_eachcache.end()){it--;}
   //  そのサイズのキャッシュが複数ある場合，(hash値 % そのサイズキャッシュの個数)により割り振り
   p.cache_num = it->second.first - (p.hash+p.sport) % it->second.second; //末尾のキャッシュ番号から引く
-  //cout << p.cache_num << endl;
   res[p.cache_num] += 1;
 #ifdef STREAM_SIZE_PREDICTION
   p.info_current_cache.first = it->first; //(add)現在のエントリサイズを記録
@@ -580,8 +578,6 @@ void Global::updatePacket(Packet p){
     }else{
       cache[p.cache_num].Update(p);
     }
-    //cout << "ID:" << p.id << "\tmiss:" << p.cache_miss;
-    //cout << "\tcache[num,line]:" << p.cache_num << "," << p.line_num << endl;
   INSERT:
     //Tableアクセス処理
     while(true){//Acsess
@@ -635,4 +631,4 @@ void Global::through(Packet p){
 double Global::getReadedPacket(){
   return num_of_ReadedPacket;
 }
- 
+
