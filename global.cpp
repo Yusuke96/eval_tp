@@ -1,8 +1,8 @@
 #include "main.hpp"
 #include <iomanip>
 vector<int> res;
-#define BYPASSSIZE 500
-#define DONT_CACHE
+//#define BYPASSSIZE 500
+//#define DONT_CACHE
 Global::Global(){
   time=0.0;
   start_time=0.0;
@@ -209,19 +209,25 @@ void Global::reportResult(){
     cout << endl;
 
     cout << "** Check sum **" << endl;
-    if( num_packet
-	-(num_of_through
-	  + table_hit_cache_hit
-	  + table_hit_cache_miss
-	  + table_miss_decode_first_packet
-	  )
+    long result_b=0;
+    if( (
+	 result_b =
+	 num_packet
+	 - (num_of_through
+	    + table_hit_cache_hit
+	    + table_hit_cache_miss
+	    + table_miss_decode_first_packet
+	    )
+	 )
 	== 0
-	){
-      cout << "sum each proc branch:TRUE" << endl;
-    }
-    else{
-      cout << "sum easn proc branch:FALSE" << endl;
-    }
+	)
+      {
+	cout << "sum each proc branch:TRUE" <<endl;
+      }
+    else
+      {
+	cout << "sum easn proc branch:FALSE(" << result_b << ")" <<endl;
+      }
     
     cout << endl;
     
