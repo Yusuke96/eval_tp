@@ -8,9 +8,8 @@ int main(int argc, char *argv[])
     global.readConf(argc, argv);
     global.showConf();
     global.initSim();
-    for(int i=0; i<100000; i++){
-      global.inputPacket(p);
-    }
+    //for(int i=0; i<100000; i++){
+    global.inputPacket(p);
     //global.inputFirstpacket();
 
     for(;;){

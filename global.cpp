@@ -12,6 +12,8 @@ Global::Global(){
   table_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
   cache_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
   cache_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  cache_hit_count={0,0,0,0,0,0,0,0};
+  cache_try_count={0,0,0,0,0,0,0,0};
   dram_stall_time=0.0;
   dram_stall_count=0.0;
   res={0,0,0,0,0,0,0,0};
@@ -178,7 +180,7 @@ void Global::reportResult(){
     cout << "# of table hit cache miss: " << table_hit_cache_miss << endl;
     cout << "# of table miss decode first packet: " << table_miss_decode_first_packet << endl;
     cout << "# of dont cache decode first packet: " << dont_cache_decode_first_packet << endl;
-    cout << "# od dont cache decode following packet: " << dont_cache_decode_following_packet << endl;
+    cout << "# of dont cache decode following packet: " << dont_cache_decode_following_packet << endl;
     cout << endl;
     
     cout << "** Table info **" << endl;
@@ -195,6 +197,12 @@ void Global::reportResult(){
       cout << "# of Flow to Cache[" << i << "]: " << res[i] << endl;
     }
     for(int i=0;i<8;i++){
+      cout << "# of access try on Cache[" << i << "]: " << cache_try_count[i] << endl;
+    }
+    for(int i=0;i<8;i++){
+      cout << "# of hit on Cache[" << i << "]: " << cache_hit_count[i] << endl;
+    }
+    for(int i=0;i<8;i++){
       cout << "Cache[" << i << "] stall count: " << cache_stall_count[i] << endl;
     }
     for(int i=0;i<8;i++){
@@ -203,7 +211,7 @@ void Global::reportResult(){
     cout << endl;
 
     cout << "** Dram info **" << endl;
-    cout << "Dram request count: " << dram_request_count << endl;
+    cout << "Dram access try: " << dram_access_try << endl;
     cout << "Dram stall count: " << dram_stall_count << endl;
     cout << "Dram stall time: " << dram_stall_time << endl;
     cout << endl;
@@ -217,6 +225,8 @@ void Global::reportResult(){
 	    + table_hit_cache_hit
 	    + table_hit_cache_miss
 	    + table_miss_decode_first_packet
+	    + dont_cache_decode_first_packet
+	    + dont_cache_decode_following_packet
 	    )
 	 )
 	== 0
@@ -239,7 +249,9 @@ void Global::reportResult(){
     cout << "# of Read through: " << num_of_through << endl;
     cout << "# of prediction miss: " << num_prediction_miss << endl;
     cout << "# of Cache hits: " << num_hit << endl;
-    cout << "Cache hit rate: " << (double)num_hit/cache_access_count << endl;
+    cout << "Cache hit rate: " << ((double)num_hit/cache_access_count)*100.0
+	 << " %"
+	 << endl;
     cout << "Process time: " << end_time - start_time << "sec" << endl;
     cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
     cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
@@ -277,7 +289,6 @@ void Global::inputPacket(Packet p){
     ss << next_p.sip[0] << next_p.sip[1] << next_p.sip[2] << next_p.sip[3] << next_p.dip[0] << next_p.dip[1] << next_p.dip[2] << next_p.dip[3] << next_p.sport << next_p.dport << next_p.protocol;
     next_p.flow_id = ss.str();
     num_of_ReadedPacket ++;
-
     CRC crc;
     crc.Align(next_p);
     next_p.hash = crc.Calc(8, 13) % num_decmod;//num_decmod=8
@@ -297,7 +308,6 @@ void Global::outputQueue(Packet p){
 
 void Global::accessTable(Packet p){
   Event e;
-  //cout << "debug:AT" << num_packet << endl;
   if(p.timestamp >= table[p.hash].next_time){
     p.timestamp += delay_table;
     p.cache_num = table[p.hash].Access(p);
@@ -305,15 +315,16 @@ void Global::accessTable(Packet p){
       table[p.hash].UpdateReadedSize(p);//(add)0702
       if(table[p.hash].GetReadedSize(p) > p.flow_size - p.comp_len){
 	p.length = table[p.hash].GetReadedSize(p) - p.flow_size + p.comp_len;
-	table_miss_decode_first_packet ++;
-	e = pair<Func, Packet>(&Global::decodeFirstPacket, p);
 #ifdef DONT_CACHE
 	if(p.comp_len <= BYPASSSIZE){
 	  num_dontcache += 1;
 	  dont_cache_decode_first_packet ++;
+	  e = pair<Func, Packet>(&Global::decodeFirstPacket, p);
 	  goto INSERT;
 	}
 #endif
+	table_miss_decode_first_packet ++;
+	e = pair<Func, Packet>(&Global::decodeFirstPacket, p);
       }else{
 	e = pair<Func, Packet>(&Global::through, p);
       }
@@ -352,11 +363,13 @@ void Global::accessTable(Packet p){
 
 void Global::accessCache(Packet p){
   Event e;
+  cache_try_count[p.cache_num]++;
   if(p.timestamp >= cache[p.cache_num].next_time_read){
     p.timestamp += delay_cache;
     if(cache[p.cache_num].Access(p)){   //  HIT
       p.cache_miss = 0;
       table_hit_cache_hit ++;
+      cache_hit_count[p.cache_num]++;
       e = pair<Func, Packet>(&Global::decodePacket, p);
     }else{  //  MISS
       p.cache_miss = 1;
@@ -380,7 +393,7 @@ void Global::accessCache(Packet p){
 
 void Global::accessDram(Packet p){
   Event e;
-  dram_request_count += 1;
+  dram_access_try += 1;
   if(p.timestamp >= dram->next_time_read){
     p.timestamp += delay_dram;
     dram->Read(p);
@@ -459,13 +472,12 @@ void Global::updateFirstPacket(Packet p){
   if(p.comp_len <= BYPASSSIZE){
     Event e;
     while(true){//DRAM access
-      dram_request_count += 1;
+      dram_access_try += 1;
       if(p.timestamp >= dram->next_time_write){
 	p.timestamp += delay_dram;
 	dram->Write(p);
 	goto INSERT;
       }else{
-	//cout << dram->next_time - p.timestamp << endl;
 	if(num_packet >= 10001){
 	  dram_stall_count += 1;
 	  if(dram->next_time_write - p.timestamp > 0.000008){
@@ -500,7 +512,7 @@ void Global::updateFirstPacket(Packet p){
     cache[p.cache_num].Insert(p);
     //12/4 ここにライトバック実装のためDRAMアクセスを入れるべき?もしくはcache.Insert内に記述か.
     while(true){//DRAM access
-      dram_request_count += 1;
+      dram_access_try += 1;
       if(p.timestamp >= dram->next_time_write){
 	p.timestamp += delay_dram;
 	dram->Write(p);
@@ -555,7 +567,7 @@ void Global::updatePacket(Packet p){
   if(p.comp_len <= BYPASSSIZE){
     //DRAM access
     while(true){
-      dram_request_count += 1;
+      dram_access_try += 1;
       if(p.timestamp >= dram->next_time_write){
 	p.timestamp += delay_dram;
 	dram->Write(p);
@@ -576,7 +588,7 @@ void Global::updatePacket(Packet p){
 #endif
   if(p.timestamp >= cache[p.cache_num].next_time_write){
     while(true){//DRAM access
-      dram_request_count += 1;
+      dram_access_try += 1;
       if(p.timestamp >= dram->next_time_write){
 	p.timestamp += delay_dram;
 	dram->Write(p);
