@@ -27,13 +27,34 @@ Packet Cache::Insert(Packet& p){
     if(tag[line].back().second == true){       //  この場合，hit->update途中のパケットが処理中なのでキャッシュ登録しない(稀？)
       return p;
     }
-    tag[line].pop_back();      // 簡易LRU
+
+    //dram access(write back)
+    while(true){
+      global.dram_access_try ++;
+      if(p.timestamp >= global.dram->next_time_write){//success
+	p.timestamp += global.delay_dram;
+	global.dram->Write(p);
+	break;
+      }else{//failure
+	if(global.num_packet >= 10001){
+	  global.dram_stall_count += 1;
+	  if(global.dram->next_time_write - p.timestamp > global.delay_dram){
+	    global.dram_stall_time += global.delay_dram;
+	    // p.timestamp += global.delay_dram;
+	  }else{
+	    global.dram_stall_time += (global.dram->next_time_write - p.timestamp);
+	    // p.timestamp += (global.dram->next_time_write - p.timestamp);
+	  }
+	}
+	p.timestamp = global.dram->next_time_write;
+      }
+    }
+
+    //簡易LRU
+    tag[line].pop_back();
   }
   p.line_num = line;
   tag[line].insert(tag[line].begin(), pair<string,bool>(p.flow_id, false));
-
-  //write back
-  
   
   return p;
 }
@@ -56,7 +77,6 @@ bool Cache::Access(Packet p){
       //  LRU ... hitしたエントリを先頭に
       tag[line].erase(it);
       tag[line].insert(tag[line].begin(), pair<string, bool>(p.flow_id, true));   //  hitした場合，hit->updateの間にエントリが追い出されるのを防ぐフラグをつける
-      //cout << "A" << endl;
       global.num_hit++;
       return true;    //  HIT
     }

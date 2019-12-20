@@ -132,36 +132,36 @@ void Global::showConf(){
 }
 
 void Global::initSim(){
-    //  Decoding Moduleの初期化
-    mod = new Decmod[num_decmod];
-    //  Cacheの初期化
-    cache = new Cache[num_cache];
-    for(unsigned int n=0; n<num_cache; n++){
-        cache[n].size = conf_cache[n];
-        cache[n].num_entry = 32 / conf_cache[n];
-	//Cacheごとのline数を計算(ex.32KB->1)
-        if(cache[n].num_entry < 4){
-            cache[n].num_line = 1;
-        }else{
-            cache[n].num_line = cache[n].num_entry / 4; // 4wayを想定
-        }
+  //  Decoding Moduleの初期化
+  mod = new Decmod[num_decmod];
+  //  Cacheの初期化
+  cache = new Cache[num_cache];
+  for(unsigned int n=0; n<num_cache; n++){
+    cache[n].size = conf_cache[n];
+    cache[n].num_entry = 32 / conf_cache[n];
+    //Cacheごとのline数を計算(ex.32KB->1)
+    if(cache[n].num_entry < 4){
+      cache[n].num_line = 1;
+    }else{
+      cache[n].num_line = cache[n].num_entry / 4; // 4wayを想定
     }
-    //  Tableの初期化
-    table = new Table[num_decmod];
-    //  Dramの初期化
-    dram = new Dram;
-    //  PCAPの読み込み
-    input.open(tracefile.c_str(), ifstream::in);
-    if(!input.is_open()){
-        cout << "Error: trace file does not exist." << endl;
-        exit(-1);
-    }
-    //  出力ファイルの作成
-    output.open(resfile.c_str(), ofstream::out);
-    if(!output.is_open()){
-        cout << "Error: result file cannot open." << endl;
-        exit(-1);
-    }
+  }
+  //  Tableの初期化
+  table = new Table[num_decmod];
+  //  Dramの初期化
+  dram = new Dram;
+  //  PCAPの読み込み
+  input.open(tracefile.c_str(), ifstream::in);
+  if(!input.is_open()){
+    cout << "Error: trace file does not exist." << endl;
+    exit(-1);
+  }
+  //  出力ファイルの作成
+  output.open(resfile.c_str(), ofstream::out);
+  if(!output.is_open()){
+    cout << "Error: result file cannot open." << endl;
+    exit(-1);
+  }
 }
 
 void Global::showResult(){
@@ -174,7 +174,6 @@ void Global::showResult(){
 
 void Global::reportResult(){
     cout << "------------------DEBUG----------------------" << endl;
-
     cout << "** Decode procedure **" << endl;
     cout << "# of table hit cache hit: " << table_hit_cache_hit << endl;
     cout << "# of table hit cache miss: " << table_hit_cache_miss << endl;
@@ -243,7 +242,7 @@ void Global::reportResult(){
     
     cout << "------------------RESULT---------------------" << endl;
     cout << "# of Packets: " << num_packet << endl;
-    //cout << "# of Flow: " << table->tag.size() << endl;
+    cout << "# of Flow: " << num_of_flow.size() << endl;
     cout << "# of Packet drops: " << num_drop << endl;
     cout << "# of don't cache: " << num_dontcache << endl;
     cout << "# of Read through: " << num_of_through << endl;
@@ -271,7 +270,7 @@ void Global::inputPacket(Packet p){
     is.str(line);
     is >> next_p.timestamp >> next_p.length >> sip >> dip >> next_p.protocol >> next_p.sport >> next_p.dport >> next_p.comp_len >> next_p.decomp_len >> next_p.comp_ratio >> next_p.stream_num >> next_p.flow_size;
     ip.str(sip);
-    next_p.timestamp = double(num_packet)/(1000*1000*1000);
+    next_p.timestamp = double(num_packet)/(1000*1000*1000);   
     if(num_packet>=10001){proc_size += next_p.length;}//***
     int i=0;
     while(getline(ip, sip, '.')){
@@ -291,6 +290,8 @@ void Global::inputPacket(Packet p){
     num_of_ReadedPacket ++;
     CRC crc;
     crc.Align(next_p);
+    //flow数のカウント
+    num_of_flow[ss.str()] += 1; 
     next_p.hash = crc.Calc(8, 13) % num_decmod;//num_decmod=8
     //  decmodのqueueに詰めるイベントを登録
     Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
@@ -303,7 +304,7 @@ void Global::inputQueue(Packet p){
 }
 
 void Global::outputQueue(Packet p){
-    mod[p.hash].Dequeue(&p);
+  mod[p.hash].Dequeue(&p);
 }
 
 void Global::accessTable(Packet p){
@@ -402,8 +403,8 @@ void Global::accessDram(Packet p){
     //cout << dram->next_time - p.timestamp << endl;
     if(num_packet >= 10001){
       dram_stall_count += 1;
-      if(dram->next_time_read - p.timestamp > 0.000008){
-	dram_stall_time  += 0.000008;
+      if(dram->next_time_read - p.timestamp > delay_dram){
+	dram_stall_time  += delay_dram;
       }else{
 	dram_stall_time += dram->next_time_read - p.timestamp;
       }
@@ -491,7 +492,6 @@ void Global::updateFirstPacket(Packet p){
     }
   }
 #endif
-  //cout << p.id << endl;
   while(it != num_eachcache.end()){
 #ifdef STREAM_SIZE_PREDICTION
     if(p.comp_len * ratio < it->first * 1024){break;}  //予測有
@@ -508,56 +508,46 @@ void Global::updateFirstPacket(Packet p){
   p.info_current_cache.first = it->first; //(add)現在のエントリサイズを記録
   p.info_current_cache.second = it->second.second; //* 32 / p.info_current_cache.first; //(add)現在のエントリサイズを持つキャッシュの個数
 #endif
-  if(p.timestamp >= cache[p.cache_num].next_time_write){
-    cache[p.cache_num].Insert(p);
-    //12/4 ここにライトバック実装のためDRAMアクセスを入れるべき?もしくはcache.Insert内に記述か.
-    while(true){//DRAM access
-      dram_access_try += 1;
-      if(p.timestamp >= dram->next_time_write){
-	p.timestamp += delay_dram;
-	dram->Write(p);
-	break;
-      }else{
-	if(num_packet >= 10001){
-	  dram_stall_count += 1;
-	  if(dram->next_time_write - p.timestamp > 0.000008){
-	    dram_stall_time += 0.000008;
-	  }else{
-	    dram_stall_time += dram->next_time_write - p.timestamp;
+
+ INSERT:
+  //cache insert
+  while(true){
+    if(p.timestamp >= cache[p.cache_num].next_time_write){
+      cache[p.cache_num].Insert(p);
+      
+      //table update
+      while(true){
+	if(p.timestamp >= table[p.hash].next_time){
+	  table[p.hash].Update(p);
+	  break;
+	}else{
+	  if(num_packet >= 10001){
+	    table_stall_time_total += table[p.hash].next_time - p.timestamp;
 	  }
+	  p.timestamp = table[p.hash].next_time;
 	}
-	p.timestamp = dram->next_time_write;
       }
-    }
-    while(true){
-      if(p.timestamp >= table[p.hash].next_time){
-	table[p.hash].Update(p);
-	break;
+      
+      // INSERT:
+      mod[p.hash].Update(p);
+      mod[p.hash].status = 0;
+      end_time = p.timestamp;
+      if(mod[p.hash].q.size() != 0){
+	//cout << "a" << endl;
+	Event e = pair<Func, Packet>(&Global::outputQueue, p);
+	event_handler.insert(pair<double, Event>(p.timestamp, e));
       }else{
-	if(num_packet >= 10001){
-	  table_stall_time_total += table[p.hash].next_time - p.timestamp;
-	}
-	p.timestamp = table[p.hash].next_time;
+	//cout <<"clear" << endl;
+	inputPacket(p);
+	break;
       }
-    }
-  INSERT:
-    mod[p.hash].Update(p);
-    mod[p.hash].status = 0;
-    end_time = p.timestamp;
-    if(mod[p.hash].q.size() != 0){
-      //cout << "a" << endl;
-      Event e = pair<Func, Packet>(&Global::outputQueue, p);
-      event_handler.insert(pair<double, Event>(p.timestamp, e));
     }else{
-      //cout << "debug.upfp: " << p.cache_num << endl;
-      inputPacket(p);
+      //cout << "cache stall w" << endl;
+      cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
+      p.timestamp = cache[p.cache_num].next_time_write;
+      //Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
+      //event_handler.insert(pair<double, Event>(p.timestamp, e));
     }
-  }else{
-    //cout << "cache stall w" << endl;
-    cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
-    p.timestamp = cache[p.cache_num].next_time_write;
-    Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
-    event_handler.insert(pair<double, Event>(p.timestamp, e));
   }
 }
 
@@ -586,64 +576,46 @@ void Global::updatePacket(Packet p){
     }
   }
 #endif
-  if(p.timestamp >= cache[p.cache_num].next_time_write){
-    while(true){//DRAM access
-      dram_access_try += 1;
-      if(p.timestamp >= dram->next_time_write){
-	p.timestamp += delay_dram;
-	dram->Write(p);
-	break;
+ INSERT:
+  while(true){
+    if(p.timestamp >= cache[p.cache_num].next_time_write){
+      p.timestamp += delay_cache;
+      if(p.cache_miss == 1){
+	cache[p.cache_num].Insert(p);
       }else{
-	if(num_packet >= 10001){
-	  dram_stall_count += 1;
-	  if(dram->next_time_write - p.timestamp > 0.000008){
-	    dram_stall_time += 0.000008;
-	  }else{
-	    dram_stall_time += dram->next_time_write - p.timestamp;
+	cache[p.cache_num].Update(p);
+      }
+      //Table update
+      while(true){//Acsess
+	if(p.timestamp >= table[p.hash].next_time){
+	  p.timestamp += delay_table;
+	  table[p.hash].Update(p);
+	  mod[p.hash].Update(p);
+	  mod[p.hash].status = 0;
+	  end_time = p.timestamp;
+	  break;
+	}else{//Wait
+	  if(num_packet >= 10001){
+	    table_stall_time_total += table[p.hash].next_time - p.timestamp;
 	  }
+	  p.timestamp = table[p.hash].next_time;
 	}
-	p.timestamp = dram->next_time_write;
       }
-    }
-    p.timestamp += delay_cache;
-    if(p.cache_miss == 1){
-      cache[p.cache_num].Insert(p);
-      //cout << p.id << endl;
-    }else{
-      cache[p.cache_num].Update(p);
-    }
-  INSERT:
-    //Tableアクセス処理
-    while(true){//Acsess
-      if(p.timestamp >= table[p.hash].next_time){
-	p.timestamp += delay_table;
-	table[p.hash].Update(p);
-	mod[p.hash].Update(p);
-	mod[p.hash].status = 0;
-	end_time = p.timestamp;
+      
+      if(mod[p.hash].q.size() != 0){
+	Event e = pair<Func, Packet>(&Global::outputQueue, p);
+	event_handler.insert(pair<double, Event>(p.timestamp, e));
+      }else{
+	inputPacket(p);
 	break;
-      }else{//Wait
-	if(num_packet >= 10001){
-	  table_stall_time_total += table[p.hash].next_time - p.timestamp;
-	}
-	p.timestamp = table[p.hash].next_time;
       }
-    }
-    
-    if(mod[p.hash].q.size() != 0){
-      //cout << "A" << endl;
-      Event e = pair<Func, Packet>(&Global::outputQueue, p);
-      event_handler.insert(pair<double, Event>(p.timestamp, e));
+      
     }else{
-      inputPacket(p);
+      cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
+      p.timestamp = cache[p.cache_num].next_time_write;
     }
-  }else{
-    //cout << "cache atall w" << endl; 
-    cache_stall_time_total += cache[p.cache_num].next_time_write - p.timestamp;
-    p.timestamp = cache[p.cache_num].next_time_write;
-    Event e = pair<Func, Packet>(&Global::updatePacket, p);
-    event_handler.insert(pair<double, Event>(p.timestamp, e));
   }
+  
 }
 
 void Global::processEvent(){

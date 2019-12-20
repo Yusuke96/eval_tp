@@ -24,6 +24,7 @@ public:
   vector<double> cache_stall_count;
   vector<long> cache_try_count;
   vector<long> cache_hit_count;
+  map<string,int> num_of_flow;
   //decode procedure counter
   double table_hit_cache_hit;
   double table_hit_cache_miss;
