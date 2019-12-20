@@ -15,12 +15,16 @@ public:
   vector<double> table_stall_time;
   vector<double> table_stall_count;
   double dram_stall_time;
-  double dram_stall_count;
-  double dram_request_count;
+  long dram_stall_count;
+  long dram_access_try;
+  long dram_wait;
   double cache_stall_time_total;
   double cache_access_count;
   vector<double> cache_stall_time;
   vector<double> cache_stall_count;
+  vector<long> cache_try_count;
+  vector<long> cache_hit_count;
+  map<string,int> num_of_flow;
   //decode procedure counter
   double table_hit_cache_hit;
   double table_hit_cache_miss;
