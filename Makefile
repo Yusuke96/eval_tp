@@ -7,7 +7,7 @@
 
 #TARGET=baseline_throughput
 #TARGET=prediction_dontcache_throughput
-TARGET=prediction_throughput
+TARGET=prediction_throughput_7x
 
 #------------------------------------------------------
 # Default Parameters
@@ -17,7 +17,7 @@ CC=g++
 #OPT=-w
 #OPT=-Wall -O2
 OPT=-Wall -O2 -DSTREAM_SIZE_PREDICTION
-#OPT=-Wall -g -ggdb -pg -O0 -fno-inline
+#OPT=-Wall -ggdb -pg -O0 -fno-inline
 #OPT=-Wall -m32
 #OPT=-Wall -g -ggdb -O0 -fno-inline
 #OPT=-Wall -g -ggdb -pg

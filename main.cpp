@@ -11,10 +11,12 @@ int main(int argc, char *argv[])
     //for(int i=0; i<100000; i++){
     global.inputPacket(p);
     //global.inputFirstpacket();
-
+    //    int i = 0;
     for(;;){
+      //     cout << i << endl;
       global.processEvent();
-      }
-    cout << "done" << endl;
+      //      i++;
+    }
+    
     return 0;
 }
