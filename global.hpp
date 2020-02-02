@@ -13,15 +13,15 @@ public:
   double proc_size;
   double table_stall_time_total;
   vector<double> table_stall_time;
-  vector<double> table_stall_count;
+  vector<long> table_stall_count;
   double dram_stall_time;
   long dram_stall_count;
   long dram_access_try;
   long dram_wait;
   double cache_stall_time_total;
-  double cache_access_count;
+  long cache_access_count;
   vector<double> cache_stall_time;
-  vector<double> cache_stall_count;
+  vector<long> cache_stall_count;
   vector<long> cache_try_count;
   vector<long> cache_hit_count;
   map<string,int> num_of_flow;
@@ -68,6 +68,7 @@ public:
   u_int np;
   u_int nd;
   u_int nh;
+  u_int eof=0;
   //  Others
   Packet next_p;
   unsigned long pcount;

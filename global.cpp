@@ -1,6 +1,6 @@
 #include "main.hpp"
 #include <iomanip>
-vector<int> res;
+vector<long> res;
 //#define BYPASSSIZE 500
 //#define DONT_CACHE
 Global::Global(){
@@ -8,15 +8,15 @@ Global::Global(){
   start_time=0.0;
   end_time=0.0;
   proc_size=0.0;
-  table_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  table_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  cache_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-  cache_stall_count={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  table_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  table_stall_count={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  cache_stall_time={0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+  cache_stall_count={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
   cache_hit_count={0,0,0,0,0,0,0,0};
   cache_try_count={0,0,0,0,0,0,0,0};
   dram_stall_time=0.0;
   dram_stall_count=0.0;
-  res={0,0,0,0,0,0,0,0};
+  res={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
   tracefile="";
   input.clear();
   resfile="";
@@ -45,7 +45,6 @@ Global::Global(){
   cache=nullptr;
   table=nullptr;
   num_packet=0;
-
   num_drop=0;
   num_hit=0;
   num_of_through=0;
@@ -59,10 +58,10 @@ Global::Global(){
 }
 
 Global::~Global(){
-	delete[] mod;
-	delete[] cache;
-    delete[] table;
-    delete dram;
+  delete[] mod;
+  delete[] cache;
+  delete[] table;
+  delete dram;
 }
 
 void Global::readConf(int argc, char *argv[]){
@@ -72,7 +71,7 @@ void Global::readConf(int argc, char *argv[]){
     ifstream conffile(argv[1], ifstream::in);
     if(!conffile.is_open()){
       cout << "Error: config file does not exist." << endl;
-      exit(-1);
+      exit(1);
     }
     while(getline(conffile, line)){
       if(line.size() == 0){continue;}
@@ -92,7 +91,7 @@ void Global::readConf(int argc, char *argv[]){
 	}
 	if(num_eachcache.count(32) == 0){
 	  cout << "Error: at least 1 cache is 32KB." << endl;
-	  exit(-1);
+	  exit(1);
 	}
       }
       if(!tag.compare("CACHEDELAY")){delay_cache = stod(val);}
@@ -134,8 +133,17 @@ void Global::showConf(){
 void Global::initSim(){
   //  Decoding Moduleの初期化
   mod = new Decmod[num_decmod];
+  //cout << num_decmod << " " << num_cache << endl;
+  
   //  Cacheの初期化
   cache = new Cache[num_cache];
+  /*for(u_int i=0;i<num_cache;i++){
+    cache_hit_count[i]=0;
+    cache_try_count[i]=0;
+    cache_stall_count[i]=0;
+    cache_stall_time[i]=0.0;
+    res[i]=0;
+    }*/
   for(unsigned int n=0; n<num_cache; n++){
     cache[n].size = conf_cache[n];
     cache[n].num_entry = 32 / conf_cache[n];
@@ -146,21 +154,26 @@ void Global::initSim(){
       cache[n].num_line = cache[n].num_entry / 4; // 4wayを想定
     }
   }
+  
   //  Tableの初期化
   table = new Table[num_decmod];
+  /*for(u_int i=0;i<num_decmod;i++){
+    table_stall_time[i]=0.0;
+    table_stall_count[i]=0;
+    }*/
   //  Dramの初期化
   dram = new Dram;
   //  PCAPの読み込み
   input.open(tracefile.c_str(), ifstream::in);
   if(!input.is_open()){
     cout << "Error: trace file does not exist." << endl;
-    exit(-1);
+    exit(1);
   }
   //  出力ファイルの作成
   output.open(resfile.c_str(), ofstream::out);
   if(!output.is_open()){
     cout << "Error: result file cannot open." << endl;
-    exit(-1);
+    exit(1);
   }
 }
 
@@ -173,93 +186,94 @@ void Global::showResult(){
 }
 
 void Global::reportResult(){
-    cout << "------------------DEBUG----------------------" << endl;
-    cout << "** Decode procedure **" << endl;
-    cout << "# of table hit cache hit: " << table_hit_cache_hit << endl;
-    cout << "# of table hit cache miss: " << table_hit_cache_miss << endl;
-    cout << "# of table miss decode first packet: " << table_miss_decode_first_packet << endl;
-    cout << "# of dont cache decode first packet: " << dont_cache_decode_first_packet << endl;
-    cout << "# of dont cache decode following packet: " << dont_cache_decode_following_packet << endl;
-    cout << endl;
-    
-    cout << "** Table info **" << endl;
-    for(int i=0;i<8;i++){
-      cout << "Table[" << i << "] stall count: " << table_stall_count[i] << endl;
-	}
-    for(int i=0;i<8;i++){
-      cout << "Table[" << i << "] stall time: " << table_stall_time[i] << endl;
-	}
-    cout << endl;
+  cout << "------------------DEBUG----------------------" << endl;
+  cout << "** Decode procedure **" << endl;
+  cout << "# of table hit cache hit: " << table_hit_cache_hit << endl;
+  cout << "# of table hit cache miss: " << table_hit_cache_miss << endl;
+  cout << "# of table miss decode first packet: " << table_miss_decode_first_packet << endl;
+  cout << "# of dont cache decode first packet: " << dont_cache_decode_first_packet << endl;
+  cout << "# of dont cache decode following packet: " << dont_cache_decode_following_packet << endl;
+  cout << endl;
+  
+  cout << "** Table info **" << endl;
+  for(u_int i=0;i<num_decmod;i++){
+    cout << "Table[" << i << "] stall count: " << table_stall_count[i] << endl;
+  }
+  for(u_int i=0;i<num_decmod;i++){
+    cout << "Table[" << i << "] stall time: " << table_stall_time[i] << endl;
+  }
+  cout << endl;
+  
+  cout << "** Cache info **" << endl;
+  for(u_int i=0;i<num_cache;i++){
+    cout << "# of Flow to Cache[" << i << "]: " << res[i] << endl;
+  }
+  for(u_int i=0;i<num_cache;i++){
+    cout << "# of access try on Cache[" << i << "]: " << cache_try_count[i] << endl;
+  }
+  for(u_int i=0;i<num_cache;i++){
+    cout << "# of hit on Cache[" << i << "]: " << cache_hit_count[i] << endl;
+  }
+  for(u_int i=0;i<num_cache;i++){
+    cout << "Cache[" << i << "] stall count: " << cache_stall_count[i] << endl;
+  }
+  for(u_int i=0;i<num_cache;i++){
+    cout << "Cache[" << i << "] stall time: " << cache_stall_time[i] << endl;
+  }
+  cout << endl;
+  
+  cout << "** Dram info **" << endl;
+  cout << "Dram access try: " << dram_access_try << endl;
+  cout << "Dram stall count: " << dram_stall_count << endl;
+  cout << "Dram stall time: " << dram_stall_time << endl;
+  cout << endl;
+  cout << "** Check sum **" << endl;
+  long result_b=0;
+  if( (
+       result_b =
+       num_packet
+       - (num_of_through
+	  + table_hit_cache_hit
+	  + table_hit_cache_miss
+	  + table_miss_decode_first_packet
+	  + dont_cache_decode_first_packet
+	  + dont_cache_decode_following_packet
+	  )
+       )
+      == 0
+      )
+    {
+      cout << "sum each proc branch:TRUE" <<endl;
+    }
+  else
+    {
+      cout << "sum easn proc branch:FALSE(" << result_b << ")" <<endl;
+    }
+  
+  cout << endl;
+  
+  cout << "------------------RESULT---------------------" << endl;
+  cout << "# of Packets: " << num_packet << endl;
+  cout << "# of Flow: " << num_of_flow.size() << endl;
+  cout << "# of Packet drops: " << num_drop << endl;
+  cout << "# of don't cache: " << num_dontcache << endl;
+  cout << "# of Read through: " << num_of_through << endl;
+  cout << "# of prediction miss: " << num_prediction_miss << endl;
+  cout << "# of Cache hits: " << num_hit << endl;
+  cout << "Cache hit rate: " << ((double)num_hit/cache_access_count)*100.0
+       << " %"
+       << endl;
+  cout << "Process time: " << end_time - start_time << "sec" << endl;
+  cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
+  cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
 
-    cout << "** Cache info **" << endl;
-    for(int i=0;i<8;i++){
-      cout << "# of Flow to Cache[" << i << "]: " << res[i] << endl;
-    }
-    for(int i=0;i<8;i++){
-      cout << "# of access try on Cache[" << i << "]: " << cache_try_count[i] << endl;
-    }
-    for(int i=0;i<8;i++){
-      cout << "# of hit on Cache[" << i << "]: " << cache_hit_count[i] << endl;
-    }
-    for(int i=0;i<8;i++){
-      cout << "Cache[" << i << "] stall count: " << cache_stall_count[i] << endl;
-    }
-    for(int i=0;i<8;i++){
-      cout << "Cache[" << i << "] stall time: " << cache_stall_time[i] << endl;
-    }
-    cout << endl;
-
-    cout << "** Dram info **" << endl;
-    cout << "Dram access try: " << dram_access_try << endl;
-    cout << "Dram stall count: " << dram_stall_count << endl;
-    cout << "Dram stall time: " << dram_stall_time << endl;
-    cout << endl;
-
-    cout << "** Check sum **" << endl;
-    long result_b=0;
-    if( (
-	 result_b =
-	 num_packet
-	 - (num_of_through
-	    + table_hit_cache_hit
-	    + table_hit_cache_miss
-	    + table_miss_decode_first_packet
-	    + dont_cache_decode_first_packet
-	    + dont_cache_decode_following_packet
-	    )
-	 )
-	== 0
-	)
-      {
-	cout << "sum each proc branch:TRUE" <<endl;
-      }
-    else
-      {
-	cout << "sum easn proc branch:FALSE(" << result_b << ")" <<endl;
-      }
-    
-    cout << endl;
-    
-    cout << "------------------RESULT---------------------" << endl;
-    cout << "# of Packets: " << num_packet << endl;
-    cout << "# of Flow: " << num_of_flow.size() << endl;
-    cout << "# of Packet drops: " << num_drop << endl;
-    cout << "# of don't cache: " << num_dontcache << endl;
-    cout << "# of Read through: " << num_of_through << endl;
-    cout << "# of prediction miss: " << num_prediction_miss << endl;
-    cout << "# of Cache hits: " << num_hit << endl;
-    cout << "Cache hit rate: " << ((double)num_hit/cache_access_count)*100.0
-	 << " %"
-	 << endl;
-    cout << "Process time: " << end_time - start_time << "sec" << endl;
-    cout << "Process size: " << proc_size/(1000*1000) << "MByte" << endl;
-    cout << "Throughput: " << (proc_size * 8)/((end_time-start_time)*1000*1000) << "Mbps" << endl;
-    
-    exit(1);
+  //return;
+  exit(1);
 }
 
 void Global::inputPacket(Packet p){
     string line;
+    //cout << "input" << cache_stall_count[5] << endl;
     getline(input, line);
     if(input.eof()){reportResult();}    //  Simulation の終了
     num_packet++;
@@ -292,7 +306,8 @@ void Global::inputPacket(Packet p){
     crc.Align(next_p);
     //flow数のカウント
     num_of_flow[ss.str()] += 1; 
-    next_p.hash = crc.Calc(8, 13) % num_decmod;//num_decmod=8
+    next_p.hash = crc.Calc(16, 13) % num_decmod;//num_decmod=8
+    //cout << crc.Calc(8,13) << " " << num_decmod << " " << next_p.hash << endl;
     //  decmodのqueueに詰めるイベントを登録
     Event e = pair<Func, Packet>(&Global::inputQueue, next_p);
     event_handler.insert(pair<double, Event>(next_p.timestamp, e));
@@ -300,15 +315,18 @@ void Global::inputPacket(Packet p){
 
 void Global::inputQueue(Packet p){
   //cout << "debug:inputQ " << num_packet << endl;
+  //cout << "inputQ" << cache_stall_count[5] << endl;
   mod[p.hash].Enqueue(&p);
 }
 
 void Global::outputQueue(Packet p){
+  //cout << "outputQ" << cache_stall_count[5] << endl;
   mod[p.hash].Dequeue(&p);
 }
 
 void Global::accessTable(Packet p){
   Event e;
+  //cout << "aT" << cache_stall_count[5] << endl;
   if(p.timestamp >= table[p.hash].next_time){
     p.timestamp += delay_table;
     p.cache_num = table[p.hash].Access(p);
@@ -364,6 +382,7 @@ void Global::accessTable(Packet p){
 
 void Global::accessCache(Packet p){
   Event e;
+  //cout << "aC" << cache_stall_count[5] << endl;
   cache_try_count[p.cache_num]++;
   if(p.timestamp >= cache[p.cache_num].next_time_read){
     p.timestamp += delay_cache;
@@ -379,14 +398,22 @@ void Global::accessCache(Packet p){
     }
   }else{
     if(num_packet >= 10001){
+      // cout << "b++" << cache_stall_count[5]<< endl;
       cache_stall_count[p.cache_num] += 1;
+      //cout << "++" << cache_stall_count[5] << endl;
       if(cache[p.cache_num].next_time_read - p.timestamp >= delay_cache){
+	//cout << "if" << cache_stall_count[5] << endl;
+	//cout << "debug:" << &cache_stall_time[p.cache_num] << endl;
+	//cout << "debug:" << &cache_stall_count[5] << endl;
 	cache_stall_time[p.cache_num] += delay_cache;
+	//cout << "if-done" << cache_stall_count[5] << endl;
       }else{
+	//cout << "else" << cache_stall_count[5] << endl;
 	cache_stall_time[p.cache_num] += cache[p.cache_num].next_time_read - p.timestamp;
       }
-    }	
+    }
     p.timestamp = cache[p.cache_num].next_time_read;
+    //cout << "stall" << cache_stall_count[5] << endl;
     e = pair<Func, Packet>(&Global::accessCache, p);
   }
   event_handler.insert(pair<double, Event>(p.timestamp, e));
@@ -394,6 +421,7 @@ void Global::accessCache(Packet p){
 
 void Global::accessDram(Packet p){
   Event e;
+  //cout << "aD" << cache_stall_count[5] << endl;
   dram_access_try += 1;
   if(p.timestamp >= dram->next_time_read){
     p.timestamp += delay_dram;
@@ -417,12 +445,14 @@ void Global::accessDram(Packet p){
 
 void Global::decodeFirstPacket(Packet p){
   p.timestamp += delay_makehuff + delay_decode;
+  //cout << "dfP" << cache_stall_count[5] << endl;
   Event e = pair<Func, Packet>(&Global::updateFirstPacket, p);
   event_handler.insert(pair<double, Event>(p.timestamp, e));
 }
 
 void Global::decodePacket(Packet p){
   p.timestamp += delay_decode;
+  //cout << "dP" << cache_stall_count[5] << endl;
   //p.current_dictsize += p.length / p.comp_ratio; //(add)辞書サイズの更新
 #ifdef DONT_CACHE
   if(p.comp_len <= BYPASSSIZE){
@@ -451,7 +481,10 @@ void Global::decodePacket(Packet p){
     //置換防止フラグ解除
     cache[p.cache_num].Update(p);
     p.cache_miss = 1;
+    //cout << p.cache_num << ",";
     p.cache_num = it->second.first - (p.hash+p.sport) % it->second.second;//cache_size内でのcache_num
+    //cout << p.cache_num << endl;
+    //cout << it->second.first << " " << (p.hash+p.sport) << " "<< it->second.second << endl;
     num_prediction_miss += 1;
   } //キャッシュ番号の更新
   else{
@@ -468,7 +501,8 @@ void Global::updateFirstPacket(Packet p){
   //  どのキャッシュ番号にキャッシュすればよいか？
   map<u_int, pair<u_int, u_int> >::iterator it = num_eachcache.begin();
   unsigned long ratio; // comp_len * ratio = decomp_len(予測値)
-  ratio = 3.0;
+  //cout << "ufP" << cache_stall_count[5] << endl;
+  ratio = 7.0;
 #ifdef DONT_CACHE
   if(p.comp_len <= BYPASSSIZE){
     Event e;
@@ -553,6 +587,7 @@ void Global::updateFirstPacket(Packet p){
 
 
 void Global::updatePacket(Packet p){
+  //cout << "up" << cache_stall_count[5] << endl;
 #ifdef DONT_CACHE
   if(p.comp_len <= BYPASSSIZE){
     //DRAM access
@@ -587,7 +622,7 @@ void Global::updatePacket(Packet p){
       }
       //Table update
       while(true){//Acsess
-	if(p.timestamp >= table[p.hash].next_time){
+	if(p.timestamp >= table[p.hash].next_time){//success
 	  p.timestamp += delay_table;
 	  table[p.hash].Update(p);
 	  mod[p.hash].Update(p);
@@ -606,6 +641,7 @@ void Global::updatePacket(Packet p){
 	Event e = pair<Func, Packet>(&Global::outputQueue, p);
 	event_handler.insert(pair<double, Event>(p.timestamp, e));
       }else{
+	//次のパケットへ
 	inputPacket(p);
 	break;
       }
@@ -629,6 +665,7 @@ void Global::processEvent(){
 }
 
 void Global::through(Packet p){
+  // cout << "th" << cache_stall_count[5] << endl;
   mod[p.hash].status = 0;
   num_of_through += 1;
   inputPacket(p);
